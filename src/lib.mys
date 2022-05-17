@@ -42,6 +42,13 @@ class _Reader:
     func read_i64(self) -> i64:
         return i64(self.read_u64())
 
+    func read_f64(self) -> f64:
+        value = 0.0
+        ivalue = self.read_u64()
+        c"memcpy(&value, &ivalue, sizeof(value));"
+
+        return value
+
     func read_bytes(self, count: i64) -> bytes:
         data = b""
 
@@ -101,14 +108,43 @@ class Element:
 
     """
 
-    func get(self, key: string) -> Element:
+    func get_double(self) -> f64:
         raise NotImplementedError()
 
     func get_string(self) -> string:
         raise NotImplementedError()
 
+    func get(self, key: string) -> Element:
+        raise NotImplementedError()
+
+    func get_binary(self) -> (u8, bytes):
+        raise NotImplementedError()
+
+    func get_boolean(self) -> bool:
+        raise NotImplementedError()
+
     func get_i32(self) -> i32:
         raise NotImplementedError()
+
+class Double(Element):
+    """A double.
+
+    """
+
+    value: f64
+
+    func get_double(self) -> f64:
+        return self.value
+
+class String(Element):
+    """A string.
+
+    """
+
+    value: string
+
+    func get_string(self) -> string:
+        return self.value
 
 class Document(Element):
     """A document.
@@ -123,17 +159,40 @@ class Document(Element):
     func get(self, key: string) -> Element:
         return self.items[key]
 
-class String(Element):
-    """A string.
+class Array(Element):
+    """An array.
 
     """
 
-    value: string
+    items: [(string, Element)]
 
-    func get_string(self) -> string:
+    func __init__(self):
+        self.items = []
+
+    func at(self, pos: i64) -> (string, Element):
+        return self.items[pos]
+
+class Binary(Element):
+    """A binary blob.
+
+    """
+
+    value: (u8, bytes)
+
+    func get_binary(self) -> (u8, bytes):
         return self.value
 
-class I32(Element):
+class Boolean(Element):
+    """A boolean.
+
+    """
+
+    value: bool
+
+    func get_boolean(self) -> bool:
+        return self.value
+
+class Int32(Element):
     """An i32.
 
     """
@@ -156,6 +215,9 @@ func _decode_cstring(reader: _Reader) -> string:
 
     return string(data)
 
+func _decode_double(reader: _Reader) -> Double:
+    return Double(reader.read_f64())
+
 func _decode_string(reader: _Reader) -> String:
     length = reader.read_i32()
     element = String(string(reader.read_bytes(i64(length - 1))))
@@ -163,20 +225,8 @@ func _decode_string(reader: _Reader) -> String:
 
     return element
 
-func _decode_i32(reader: _Reader) -> I32:
-    return I32(reader.read_i32())
-
-func decode(data: bytes) -> Document:
-    """Decode given BSON document.
-
-    """
-
-    reader = _Reader(data)
-    length = reader.read_i32()
-
-    if i32(len(data)) != length:
-        raise BsonError("Wrong length.")
-
+func _decode_document(reader: _Reader) -> Document:
+    reader.read_i32()
     document = Document()
 
     while True:
@@ -189,36 +239,68 @@ func decode(data: bytes) -> Document:
         element: Element = None
 
         match kind:
-            case 0x02:
+            case 1:
+                element = _decode_double(reader)
+            case 2:
                 element = _decode_string(reader)
-            case 0x10:
+            case 3:
+                element = _decode_document(reader)
+            case 5:
+                element = _decode_binary(reader)
+            case 8:
+                element = _decode_boolean(reader)
+            case 16:
                 element = _decode_i32(reader)
             case _:
-                raise BsonError("Bad kind.")
+                raise BsonError(f"Bad kind {kind}.")
 
         document.items[name] = element
 
     return document
 
+func _decode_binary(reader: _Reader) -> Binary:
+    length = reader.read_i32()
+    subtype = reader.read_u8()
+    data = reader.read_bytes(i64(length))
+
+    return Binary((subtype, data))
+
+func _decode_boolean(reader: _Reader) -> Boolean:
+    return Boolean(reader.read_u8() == 1)
+
+func _decode_i32(reader: _Reader) -> Int32:
+    return Int32(reader.read_i32())
+
+func decode(data: bytes) -> Document:
+    """Decode given BSON document.
+
+    """
+
+    return _decode_document(_Reader(data))
+
 func encode(document: Document) -> bytes:
+    """Encode given BSON document.
+
+    """
+
     writer = _Writer()
     writer.write_i32(0)
 
     for name, element in document.items:
         match element:
             case String() as string_element:
-                writer.write_u8(0x02)
+                writer.write_u8(2)
                 writer.write_bytes(name.to_utf8())
                 writer.write_u8(0)
-                value = element.get_string().to_utf8()
+                value = string_element.get_string().to_utf8()
                 writer.write_i32(i32(len(value)) + 1)
                 writer.write_bytes(value)
                 writer.write_u8(0)
-            case I32() as i32_element:
-                writer.write_u8(0x10)
+            case Int32() as int32_element:
+                writer.write_u8(16)
                 writer.write_bytes(name.to_utf8())
                 writer.write_u8(0)
-                writer.write_i32(element.get_i32())
+                writer.write_i32(int32_element.get_i32())
             case _:
                 raise BsonError("Bad element.")
 
@@ -228,7 +310,7 @@ func encode(document: Document) -> bytes:
     return writer.data()
 
 @test
-func test_small_document():
+func test_small_mongodb():
     encoded = (
         b"\x24\x00\x00\x00"
         b"\x10" b"whatsmyuri\x00" b"\x01\x00\x00\x00"
@@ -246,3 +328,30 @@ func test_small_document():
         b"\x00")
 
     assert encode(document) in [encoded, encoded_swapped]
+
+@test
+func test_mongodb_list_databases():
+    encoded = (
+        b"\x5a\x00\x00\x00\x01\x6c\x69\x73\x74\x44\x61\x74\x61\x62\x61\x73"
+        b"\x65\x73\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x08\x6e\x61\x6d\x65"
+        b"\x4f\x6e\x6c\x79\x00\x00\x03\x6c\x73\x69\x64\x00\x1e\x00\x00\x00"
+        b"\x05\x69\x64\x00\x10\x00\x00\x00\x04\xfb\xe9\x2e\x09\xc9\xc8\x45"
+        b"\x09\xa8\x01\x1d\x0f\x73\xe5\xf7\x46\x00\x02\x24\x64\x62\x00\x06"
+        b"\x00\x00\x00\x61\x64\x6d\x69\x6e\x00\x00")
+
+    document = decode(encoded)
+    print(document)
+    assert document.get("listDatabases").get_double() == 1.0
+    assert not document.get("nameOnly").get_boolean()
+    assert document.get("lsid").get("id").get_binary() == (
+        4,
+        b"\xfb\xe9\x2e\x09\xc9\xc8\x45\x09\xa8\x01\x1d\x0f\x73\xe5\xf7\x46")
+    assert document.get("$db").get_string() == "admin"
+
+    # encoded_swapped = (
+    #     b"\x24\x00\x00\x00"
+    #     b"\x02" b"$db\x00" b"\x06\x00\x00\x00" b"admin\x00"
+    #     b"\x10" b"whatsmyuri\x00" b"\x01\x00\x00\x00"
+    #     b"\x00")
+    #
+    # assert encode(document) in [encoded, encoded_swapped]
