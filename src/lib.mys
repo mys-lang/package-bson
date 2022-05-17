@@ -1,3 +1,7 @@
+c"""source-before-namespace
+#include <cstring>
+"""
+
 class BsonError(Error):
     message: string
 
