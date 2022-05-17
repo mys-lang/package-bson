@@ -282,6 +282,21 @@ func decode(data: bytes) -> Document:
 
     return _decode_document(_Reader(data))
 
+func _encode_string(writer: _Writer, name: string, element: String):
+    writer.write_u8(2)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    value = element.value.to_utf8()
+    writer.write_i32(i32(len(value)) + 1)
+    writer.write_bytes(value)
+    writer.write_u8(0)
+
+func _encode_int32(writer: _Writer, name: string, element: Int32):
+    writer.write_u8(16)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    writer.write_i32(element.value)
+
 func encode(document: Document) -> bytes:
     """Encode given BSON document.
 
@@ -293,18 +308,9 @@ func encode(document: Document) -> bytes:
     for name, element in document.items:
         match element:
             case String() as string_element:
-                writer.write_u8(2)
-                writer.write_bytes(name.to_utf8())
-                writer.write_u8(0)
-                value = string_element.value.to_utf8()
-                writer.write_i32(i32(len(value)) + 1)
-                writer.write_bytes(value)
-                writer.write_u8(0)
+                _encode_string(writer, name, string_element)
             case Int32() as int32_element:
-                writer.write_u8(16)
-                writer.write_bytes(name.to_utf8())
-                writer.write_u8(0)
-                writer.write_i32(int32_element.value)
+                _encode_int32(writer, name, int32_element)
             case _:
                 raise BsonError("Bad element.")
 
