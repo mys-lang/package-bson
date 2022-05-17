@@ -193,6 +193,16 @@ class Binary(Element):
     func get_binary(self) -> (u8, bytes):
         return self.value
 
+class ObjectId(Element):
+    """An object id.
+
+    """
+
+    value: bytes
+
+    func get_object_id(self) -> bytes:
+        return self.value
+
 class Boolean(Element):
     """A boolean.
 
@@ -270,6 +280,8 @@ func _decode_document(reader: _Reader) -> Document:
                 element = _decode_array(reader)
             case 5:
                 element = _decode_binary(reader)
+            case 7:
+                element = _decode_object_id(reader)
             case 8:
                 element = _decode_boolean(reader)
             case 16:
@@ -292,6 +304,9 @@ func _decode_binary(reader: _Reader) -> Binary:
     data = reader.read_bytes(i64(length))
 
     return Binary((subtype, data))
+
+func _decode_object_id(reader: _Reader) -> ObjectId:
+    return ObjectId(reader.read_bytes(12))
 
 func _decode_boolean(reader: _Reader) -> Boolean:
     return Boolean(reader.read_u8() == 1)
