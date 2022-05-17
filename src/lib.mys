@@ -1,7 +1,7 @@
 class BsonError(Error):
     message: string
 
-class Reader:
+class _Reader:
     _data: bytes
     _pos: i64
 
@@ -50,7 +50,7 @@ class Reader:
 
         return data
 
-class Writer:
+class _Writer:
     _data: bytes
 
     func __init__(self):
@@ -143,7 +143,7 @@ class I32(Element):
     func get_i32(self) -> i32:
         return self.value
 
-func _decode_cstring(reader: Reader) -> string:
+func _decode_cstring(reader: _Reader) -> string:
     data = b""
 
     while True:
@@ -156,14 +156,14 @@ func _decode_cstring(reader: Reader) -> string:
 
     return string(data)
 
-func _decode_string(reader: Reader) -> String:
+func _decode_string(reader: _Reader) -> String:
     length = reader.read_i32()
     element = String(string(reader.read_bytes(i64(length - 1))))
     reader.read_u8()
 
     return element
 
-func _decode_i32(reader: Reader) -> I32:
+func _decode_i32(reader: _Reader) -> I32:
     return I32(reader.read_i32())
 
 func decode(data: bytes) -> Document:
@@ -171,7 +171,7 @@ func decode(data: bytes) -> Document:
 
     """
 
-    reader = Reader(data)
+    reader = _Reader(data)
     length = reader.read_i32()
 
     if i32(len(data)) != length:
@@ -201,7 +201,7 @@ func decode(data: bytes) -> Document:
     return document
 
 func encode(document: Document) -> bytes:
-    writer = Writer()
+    writer = _Writer()
     writer.write_i32(0)
 
     for name, element in document.items:
