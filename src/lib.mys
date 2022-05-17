@@ -127,7 +127,7 @@ class Element:
     func get_boolean(self) -> bool:
         raise NotImplementedError()
 
-    func get_i32(self) -> i32:
+    func get_int32(self) -> i32:
         raise NotImplementedError()
 
 class Double(Element):
@@ -203,7 +203,7 @@ class Int32(Element):
 
     value: i32
 
-    func get_i32(self) -> i32:
+    func get_int32(self) -> i32:
         return self.value
 
 func _decode_cstring(reader: _Reader) -> string:
@@ -254,7 +254,7 @@ func _decode_document(reader: _Reader) -> Document:
             case 8:
                 element = _decode_boolean(reader)
             case 16:
-                element = _decode_i32(reader)
+                element = _decode_int32(reader)
             case _:
                 raise BsonError(f"Bad kind {kind}.")
 
@@ -272,7 +272,7 @@ func _decode_binary(reader: _Reader) -> Binary:
 func _decode_boolean(reader: _Reader) -> Boolean:
     return Boolean(reader.read_u8() == 1)
 
-func _decode_i32(reader: _Reader) -> Int32:
+func _decode_int32(reader: _Reader) -> Int32:
     return Int32(reader.read_i32())
 
 func decode(data: bytes) -> Document:
@@ -296,7 +296,7 @@ func encode(document: Document) -> bytes:
                 writer.write_u8(2)
                 writer.write_bytes(name.to_utf8())
                 writer.write_u8(0)
-                value = string_element.get_string().to_utf8()
+                value = string_element.value.to_utf8()
                 writer.write_i32(i32(len(value)) + 1)
                 writer.write_bytes(value)
                 writer.write_u8(0)
@@ -304,7 +304,7 @@ func encode(document: Document) -> bytes:
                 writer.write_u8(16)
                 writer.write_bytes(name.to_utf8())
                 writer.write_u8(0)
-                writer.write_i32(int32_element.get_i32())
+                writer.write_i32(int32_element.value)
             case _:
                 raise BsonError("Bad element.")
 
@@ -322,7 +322,7 @@ func test_small_mongodb():
         b"\x00")
 
     document = decode(encoded)
-    assert document.get("whatsmyuri").get_i32() == 1
+    assert document.get("whatsmyuri").get_int32() == 1
     assert document.get("$db").get_string() == "admin"
 
     encoded_swapped = (
