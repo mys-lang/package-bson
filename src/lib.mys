@@ -118,7 +118,10 @@ class Element:
     func get_string(self) -> string:
         raise NotImplementedError()
 
-    func get(self, key: string) -> Element:
+    func get(self, name: string) -> Element:
+        raise NotImplementedError()
+
+    func at(self, index: i64) -> (string, Element):
         raise NotImplementedError()
 
     func get_binary(self) -> (u8, bytes):
@@ -128,6 +131,9 @@ class Element:
         raise NotImplementedError()
 
     func get_int32(self) -> i32:
+        raise NotImplementedError()
+
+    func get_int64(self) -> i64:
         raise NotImplementedError()
 
 class Double(Element):
@@ -155,26 +161,27 @@ class Document(Element):
 
     """
 
-    items: {string: Element}
+    elements: [(string, Element)]
 
     func __init__(self):
-        self.items = {}
+        self.elements = []
 
-    func get(self, key: string) -> Element:
-        return self.items[key]
+    func get(self, name: string) -> Element:
+        for key, element in self.elements:
+            if key == name:
+                return element
+
+        raise BsonError(f"Element '{name}' not found.")
 
 class Array(Element):
     """An array.
 
     """
 
-    items: [(string, Element)]
+    document: Document
 
-    func __init__(self):
-        self.items = []
-
-    func at(self, pos: i64) -> (string, Element):
-        return self.items[pos]
+    func at(self, index: i64) -> (string, Element):
+        return self.document.elements[index]
 
 class Binary(Element):
     """A binary blob.
@@ -204,6 +211,16 @@ class Int32(Element):
     value: i32
 
     func get_int32(self) -> i32:
+        return self.value
+
+class Int64(Element):
+    """An i64.
+
+    """
+
+    value: i64
+
+    func get_int64(self) -> i64:
         return self.value
 
 func _decode_cstring(reader: _Reader) -> string:
@@ -249,18 +266,25 @@ func _decode_document(reader: _Reader) -> Document:
                 element = _decode_string(reader)
             case 3:
                 element = _decode_document(reader)
+            case 4:
+                element = _decode_array(reader)
             case 5:
                 element = _decode_binary(reader)
             case 8:
                 element = _decode_boolean(reader)
             case 16:
                 element = _decode_int32(reader)
+            case 18:
+                element = _decode_int64(reader)
             case _:
                 raise BsonError(f"Bad kind {kind}.")
 
-        document.items[name] = element
+        document.elements.append((name, element))
 
     return document
+
+func _decode_array(reader: _Reader) -> Array:
+    return Array(_decode_document(reader))
 
 func _decode_binary(reader: _Reader) -> Binary:
     length = reader.read_i32()
@@ -274,6 +298,9 @@ func _decode_boolean(reader: _Reader) -> Boolean:
 
 func _decode_int32(reader: _Reader) -> Int32:
     return Int32(reader.read_i32())
+
+func _decode_int64(reader: _Reader) -> Int64:
+    return Int64(reader.read_i64())
 
 func decode(data: bytes) -> Document:
     """Decode given BSON document.
@@ -305,7 +332,7 @@ func encode(document: Document) -> bytes:
     writer = _Writer()
     writer.write_i32(0)
 
-    for name, element in document.items:
+    for name, element in document.elements:
         match element:
             case String() as string_element:
                 _encode_string(writer, name, string_element)
