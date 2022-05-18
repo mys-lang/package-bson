@@ -118,7 +118,13 @@ class Element:
     func get_string(self) -> string:
         raise NotImplementedError()
 
+    func get_document(self) -> [(string, Element)]:
+        raise NotImplementedError()
+
     func get(self, name: string) -> Element:
+        raise NotImplementedError()
+
+    func get_array(self) -> [Element]:
         raise NotImplementedError()
 
     func at(self, index: i64) -> Element:
@@ -166,6 +172,9 @@ class Document(Element):
     func __init__(self, elements: [(string, Element)] = []):
         self.elements = elements
 
+    func get_document(self) -> [(string, Element)]:
+        return self.elements
+
     func get(self, name: string) -> Element:
         for key, element in self.elements:
             if key == name:
@@ -189,6 +198,9 @@ class Array(Element):
     func append(self, element: Element):
         index = str(len(self.document.elements))
         self.document.elements.append((index, element))
+
+    func get_array(self) -> [Element]:
+        return [element for _, element in self.document.elements]
 
     func at(self, index: i64) -> Element:
         return self.document.elements[index][1]
@@ -360,6 +372,8 @@ func _encode_document_no_header(writer: _Writer, document: Document):
                 _encode_array(writer, name, array_element)
             case Int32() as int32_element:
                 _encode_int32(writer, name, int32_element)
+            case Int64() as int64_element:
+                _encode_int64(writer, name, int64_element)
             case _:
                 raise BsonError(f"Bad element '{element}'.")
 
@@ -383,6 +397,12 @@ func _encode_int32(writer: _Writer, name: string, element: Int32):
     writer.write_bytes(name.to_utf8())
     writer.write_u8(0)
     writer.write_i32(element.value)
+
+func _encode_int64(writer: _Writer, name: string, element: Int64):
+    writer.write_u8(18)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    writer.write_i64(element.value)
 
 func encode(document: Document) -> bytes:
     """Encode given BSON document.
