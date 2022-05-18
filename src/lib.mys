@@ -370,6 +370,8 @@ func _encode_document_no_header(writer: _Writer, document: Document):
                 _encode_document(writer, name, document_element)
             case Array() as array_element:
                 _encode_array(writer, name, array_element)
+            case Boolean() as boolean_element:
+                _encode_boolean(writer, name, boolean_element)
             case Int32() as int32_element:
                 _encode_int32(writer, name, int32_element)
             case Int64() as int64_element:
@@ -391,6 +393,12 @@ func _encode_array(writer: _Writer, name: string, element: Array):
     writer.write_bytes(name.to_utf8())
     writer.write_u8(0)
     _encode_document_no_header(writer, element.document)
+
+func _encode_boolean(writer: _Writer, name: string, element: Boolean):
+    writer.write_u8(8)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    writer.write_u8(u8(1 if element.value else 0))
 
 func _encode_int32(writer: _Writer, name: string, element: Int32):
     writer.write_u8(16)
