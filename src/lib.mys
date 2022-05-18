@@ -121,7 +121,7 @@ class Element:
     func get(self, name: string) -> Element:
         raise NotImplementedError()
 
-    func at(self, index: i64) -> (string, Element):
+    func at(self, index: i64) -> Element:
         raise NotImplementedError()
 
     func get_binary(self) -> (u8, bytes):
@@ -163,8 +163,8 @@ class Document(Element):
 
     elements: [(string, Element)]
 
-    func __init__(self):
-        self.elements = []
+    func __init__(self, elements: [(string, Element)] = []):
+        self.elements = elements
 
     func get(self, name: string) -> Element:
         for key, element in self.elements:
@@ -180,8 +180,18 @@ class Array(Element):
 
     document: Document
 
-    func at(self, index: i64) -> (string, Element):
-        return self.document.elements[index]
+    func __init__(self, elements: [Element] = []):
+        self.document = Document()
+
+        for i, element in enumerate(elements):
+            self.document.elements.append((str(i), element))
+
+    func append(self, element: Element):
+        index = str(len(self.document.elements))
+        self.document.elements.append((index, element))
+
+    func at(self, index: i64) -> Element:
+        return self.document.elements[index][1]
 
 class Binary(Element):
     """A binary blob.
@@ -296,7 +306,10 @@ func _decode_document(reader: _Reader) -> Document:
     return document
 
 func _decode_array(reader: _Reader) -> Array:
-    return Array(_decode_document(reader))
+    array = Array()
+    array.document = _decode_document(reader)
+
+    return array
 
 func _decode_binary(reader: _Reader) -> Binary:
     length = reader.read_i32()
@@ -333,6 +346,38 @@ func _encode_string(writer: _Writer, name: string, element: String):
     writer.write_bytes(value)
     writer.write_u8(0)
 
+func _encode_document_no_header(writer: _Writer, document: Document):
+    start = len(writer.data())
+    writer.write_i32(0)
+
+    for name, element in document.elements:
+        match element:
+            case String() as string_element:
+                _encode_string(writer, name, string_element)
+            case Document() as document_element:
+                _encode_document(writer, name, document_element)
+            case Array() as array_element:
+                _encode_array(writer, name, array_element)
+            case Int32() as int32_element:
+                _encode_int32(writer, name, int32_element)
+            case _:
+                raise BsonError(f"Bad element '{element}'.")
+
+    writer.write_u8(0)
+    writer.write_i32_at(i64(start), i32(len(writer.data()) - start))
+
+func _encode_document(writer: _Writer, name: string, element: Document):
+    writer.write_u8(3)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    _encode_document_no_header(writer, element)
+
+func _encode_array(writer: _Writer, name: string, element: Array):
+    writer.write_u8(4)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    _encode_document_no_header(writer, element.document)
+
 func _encode_int32(writer: _Writer, name: string, element: Int32):
     writer.write_u8(16)
     writer.write_bytes(name.to_utf8())
@@ -345,19 +390,7 @@ func encode(document: Document) -> bytes:
     """
 
     writer = _Writer()
-    writer.write_i32(0)
-
-    for name, element in document.elements:
-        match element:
-            case String() as string_element:
-                _encode_string(writer, name, string_element)
-            case Int32() as int32_element:
-                _encode_int32(writer, name, int32_element)
-            case _:
-                raise BsonError("Bad element.")
-
-    writer.write_u8(0)
-    writer.write_i32_at(0, i32(len(writer.data())))
+    _encode_document_no_header(writer, document)
 
     return writer.data()
 
