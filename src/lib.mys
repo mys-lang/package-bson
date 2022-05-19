@@ -34,12 +34,6 @@ class _Reader:
     func read_u64(self) -> u64:
         return u64(self.read_u32()) | (u64(self.read_u32()) << 32)
 
-    func read_i8(self) -> i8:
-        return i8(self.read_u8())
-
-    func read_i16(self) -> i16:
-        return i16(self.read_u16())
-
     func read_i32(self) -> i32:
         return i32(self.read_u32())
 
@@ -91,17 +85,16 @@ class _Writer:
         self.write_u32(u32(value))
         self.write_u32(u32(value >> 32))
 
-    func write_i8(self, value: i8):
-        self.write_u8(u8(value))
-
-    func write_i16(self, value: i16):
-        self.write_u16(u16(value))
-
     func write_i32(self, value: i32):
         self.write_u32(u32(value))
 
     func write_i64(self, value: i64):
         self.write_u64(u64(value))
+
+    func write_f64(self, value: f64):
+        ivalue = 0
+        c"memcpy(&ivalue, &value, sizeof(ivalue));"
+        self.write_i64(ivalue)
 
     func write_bytes(self, value: bytes):
         self._data += value
@@ -113,34 +106,34 @@ class Element:
     """
 
     func get_double(self) -> f64:
-        raise NotImplementedError()
+        raise BsonError("Not a double.")
 
     func get_string(self) -> string:
-        raise NotImplementedError()
+        raise BsonError("Not a string.")
 
     func get_document(self) -> [(string, Element)]:
-        raise NotImplementedError()
+        raise BsonError("Not a document.")
 
     func get(self, name: string) -> Element:
-        raise NotImplementedError()
+        raise BsonError("Not a document.")
 
     func get_array(self) -> [Element]:
-        raise NotImplementedError()
+        raise BsonError("Not an array.")
 
     func at(self, index: i64) -> Element:
-        raise NotImplementedError()
+        raise BsonError("Not an array.")
 
     func get_binary(self) -> (u8, bytes):
-        raise NotImplementedError()
+        raise BsonError("Not a binary.")
 
     func get_boolean(self) -> bool:
-        raise NotImplementedError()
+        raise BsonError("Not a boolean.")
 
     func get_int32(self) -> i32:
-        raise NotImplementedError()
+        raise BsonError("Not an int32.")
 
     func get_int64(self) -> i64:
-        raise NotImplementedError()
+        raise BsonError("Not an int64.")
 
 class Double(Element):
     """A double.
@@ -349,6 +342,12 @@ func decode(data: bytes) -> Document:
 
     return _decode_document(_Reader(data))
 
+func _encode_double(writer: _Writer, name: string, element: Double):
+    writer.write_u8(1)
+    writer.write_bytes(name.to_utf8())
+    writer.write_u8(0)
+    writer.write_f64(element.value)
+
 func _encode_string(writer: _Writer, name: string, element: String):
     writer.write_u8(2)
     writer.write_bytes(name.to_utf8())
@@ -364,6 +363,8 @@ func _encode_document_no_header(writer: _Writer, document: Document):
 
     for name, element in document.elements:
         match element:
+            case Double() as double_element:
+                _encode_double(writer, name, double_element)
             case String() as string_element:
                 _encode_string(writer, name, string_element)
             case Document() as document_element:
@@ -453,7 +454,6 @@ func test_mongodb_list_databases():
         b"\x00\x00\x00\x61\x64\x6d\x69\x6e\x00\x00")
 
     document = decode(encoded)
-    print(document)
     assert document.get("listDatabases").get_double() == 1.0
     assert not document.get("nameOnly").get_boolean()
     assert document.get("lsid").get("id").get_binary() == (
@@ -461,10 +461,48 @@ func test_mongodb_list_databases():
         b"\xfb\xe9\x2e\x09\xc9\xc8\x45\x09\xa8\x01\x1d\x0f\x73\xe5\xf7\x46")
     assert document.get("$db").get_string() == "admin"
 
-    # encoded_swapped = (
-    #     b"\x24\x00\x00\x00"
-    #     b"\x02" b"$db\x00" b"\x06\x00\x00\x00" b"admin\x00"
-    #     b"\x10" b"whatsmyuri\x00" b"\x01\x00\x00\x00"
-    #     b"\x00")
-    #
-    # assert encode(document) in [encoded, encoded_swapped]
+@test
+func test_double():
+    document = Document([("foo", Double(1.0))])
+    encoded = encode(document)
+    assert encoded == b"\x12\x00\x00\x00\x01foo\x00\x00\x00\x00\x00\x00\x00\xf0?\x00"
+    decoded = decode(encoded)
+    assert decoded.get("foo").get_double() == 1.0
+
+@test
+func test_string():
+    document = Document([("foo", String("bar"))])
+    encoded = encode(document)
+    assert encoded == b"\x12\x00\x00\x00\x02foo\x00\x04\x00\x00\x00bar\x00\x00"
+    decoded = decode(encoded)
+    assert decoded.get("foo").get_string() == "bar"
+
+@test
+func test_document():
+    document = Document([("a", Document()), ("b", Boolean(False))])
+    encoded = encode(document)
+    assert encoded == (
+        b"\x11\x00\x00\x00\x03a\x00\x05\x00\x00\x00\x00\x08b\x00\x00\x00")
+    decoded = decode(encoded)
+    assert len(decoded.get_document()) == 2
+    assert len(decoded.get("a").get_document()) == 0
+    assert not decoded.get("b").get_boolean()
+    document.elements.append(("foo", String("bar")))
+    assert document.get("foo").get_string() == "bar"
+
+    try:
+        document.get("bar")
+        assert False
+    except BsonError as error:
+        assert error.message == "Element 'bar' not found."
+
+@test
+func test_array():
+    document = Document([("foo", Array([Int64(5)]))])
+    encoded = encode(document)
+    assert encoded == (
+        b"\x1a\x00\x00\x00\x04foo\x00\x10\x00\x00\x00\x120\x00\x05\x00"
+        b"\x00\x00\x00\x00\x00\x00\x00\x00")
+    decoded = decode(encoded)
+    assert len(decoded.get("foo").get_array()) == 1
+    assert decoded.get("foo").at(0).get_int64() == 5
