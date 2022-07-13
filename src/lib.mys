@@ -99,8 +99,7 @@ class _Writer:
     func write_bytes(self, value: bytes):
         self._data += value
 
-@trait
-class Element:
+trait Element:
     """An element in a BSON document.
 
     """
