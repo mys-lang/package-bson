@@ -422,8 +422,7 @@ func encode(document: Document) -> bytes:
 
     return writer.data()
 
-@test
-func test_small_mongodb():
+test small_mongodb():
     encoded = (
         b"\x24\x00\x00\x00"
         b"\x10" b"whatsmyuri\x00" b"\x01\x00\x00\x00"
@@ -442,8 +441,7 @@ func test_small_mongodb():
 
     assert encode(document) in [encoded, encoded_swapped]
 
-@test
-func test_mongodb_list_databases():
+test mongodb_list_databases():
     encoded = (
         b"\x5a\x00\x00\x00\x01\x6c\x69\x73\x74\x44\x61\x74\x61\x62\x61\x73"
         b"\x65\x73\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x08\x6e\x61\x6d\x65"
@@ -460,24 +458,21 @@ func test_mongodb_list_databases():
         b"\xfb\xe9\x2e\x09\xc9\xc8\x45\x09\xa8\x01\x1d\x0f\x73\xe5\xf7\x46")
     assert document.get("$db").get_string() == "admin"
 
-@test
-func test_double():
+test double():
     document = Document([("foo", Double(1.0))])
     encoded = encode(document)
     assert encoded == b"\x12\x00\x00\x00\x01foo\x00\x00\x00\x00\x00\x00\x00\xf0?\x00"
     decoded = decode(encoded)
     assert decoded.get("foo").get_double() == 1.0
 
-@test
-func test_string():
+test string():
     document = Document([("foo", String("bar"))])
     encoded = encode(document)
     assert encoded == b"\x12\x00\x00\x00\x02foo\x00\x04\x00\x00\x00bar\x00\x00"
     decoded = decode(encoded)
     assert decoded.get("foo").get_string() == "bar"
 
-@test
-func test_document():
+test document():
     document = Document([("a", Document()), ("b", Boolean(False))])
     encoded = encode(document)
     assert encoded == (
@@ -495,8 +490,7 @@ func test_document():
     except BsonError as error:
         assert error.message == "Element 'bar' not found."
 
-@test
-func test_array():
+test array():
     document = Document([("foo", Array([Int64(5)]))])
     encoded = encode(document)
     assert encoded == (
