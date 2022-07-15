@@ -14,7 +14,7 @@ class _Reader:
         self._pos = 0
 
     func available(self) -> bool:
-        return self._pos < i64(len(self._data))
+        return self._pos < self._data.length()
 
     func read_u8(self) -> u8:
         if not self.available():
@@ -188,7 +188,7 @@ class Array(Element):
             self.document.elements.append((str(i), element))
 
     func append(self, element: Element):
-        index = str(len(self.document.elements))
+        index = str(self.document.elements.length())
         self.document.elements.append((index, element))
 
     func get_array(self) -> [Element]:
@@ -352,12 +352,12 @@ func _encode_string(writer: _Writer, name: string, element: String):
     writer.write_bytes(name.to_utf8())
     writer.write_u8(0)
     value = element.value.to_utf8()
-    writer.write_i32(i32(len(value)) + 1)
+    writer.write_i32(i32(value.length()) + 1)
     writer.write_bytes(value)
     writer.write_u8(0)
 
 func _encode_document_no_header(writer: _Writer, document: Document):
-    start = len(writer.data())
+    start = writer.data().length()
     writer.write_i32(0)
 
     for name, element in document.elements:
@@ -380,7 +380,7 @@ func _encode_document_no_header(writer: _Writer, document: Document):
                 raise BsonError(f"Bad element '{element}'.")
 
     writer.write_u8(0)
-    writer.write_i32_at(i64(start), i32(len(writer.data()) - start))
+    writer.write_i32_at(start, i32(writer.data().length() - start))
 
 func _encode_document(writer: _Writer, name: string, element: Document):
     writer.write_u8(3)
@@ -478,8 +478,8 @@ test document():
     assert encoded == (
         b"\x11\x00\x00\x00\x03a\x00\x05\x00\x00\x00\x00\x08b\x00\x00\x00")
     decoded = decode(encoded)
-    assert len(decoded.get_document()) == 2
-    assert len(decoded.get("a").get_document()) == 0
+    assert decoded.get_document().length() == 2
+    assert decoded.get("a").get_document().length() == 0
     assert not decoded.get("b").get_boolean()
     document.elements.append(("foo", String("bar")))
     assert document.get("foo").get_string() == "bar"
@@ -497,5 +497,5 @@ test array():
         b"\x1a\x00\x00\x00\x04foo\x00\x10\x00\x00\x00\x120\x00\x05\x00"
         b"\x00\x00\x00\x00\x00\x00\x00\x00")
     decoded = decode(encoded)
-    assert len(decoded.get("foo").get_array()) == 1
+    assert decoded.get("foo").get_array().length() == 1
     assert decoded.get("foo").at(0).get_int64() == 5
