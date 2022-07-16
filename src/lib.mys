@@ -104,34 +104,34 @@ trait Element:
 
     """
 
-    func get_double(self) -> f64:
+    func double(self) -> f64:
         raise BsonError("Not a double.")
 
-    func get_string(self) -> string:
+    func string(self) -> string:
         raise BsonError("Not a string.")
 
-    func get_document(self) -> [(string, Element)]:
+    func document(self) -> [(string, Element)]:
         raise BsonError("Not a document.")
 
     func get(self, name: string) -> Element:
         raise BsonError("Not a document.")
 
-    func get_array(self) -> [Element]:
+    func array(self) -> [Element]:
         raise BsonError("Not an array.")
 
     func at(self, index: i64) -> Element:
         raise BsonError("Not an array.")
 
-    func get_binary(self) -> (u8, bytes):
+    func binary(self) -> (u8, bytes):
         raise BsonError("Not a binary.")
 
-    func get_boolean(self) -> bool:
+    func boolean(self) -> bool:
         raise BsonError("Not a boolean.")
 
-    func get_int32(self) -> i32:
+    func int32(self) -> i32:
         raise BsonError("Not an int32.")
 
-    func get_int64(self) -> i64:
+    func int64(self) -> i64:
         raise BsonError("Not an int64.")
 
 class Double(Element):
@@ -141,7 +141,7 @@ class Double(Element):
 
     value: f64
 
-    func get_double(self) -> f64:
+    func double(self) -> f64:
         return self.value
 
 class String(Element):
@@ -151,7 +151,7 @@ class String(Element):
 
     value: string
 
-    func get_string(self) -> string:
+    func string(self) -> string:
         return self.value
 
 class Document(Element):
@@ -164,7 +164,7 @@ class Document(Element):
     func __init__(self, elements: [(string, Element)] = []):
         self.elements = elements
 
-    func get_document(self) -> [(string, Element)]:
+    func document(self) -> [(string, Element)]:
         return self.elements
 
     func get(self, name: string) -> Element:
@@ -179,23 +179,23 @@ class Array(Element):
 
     """
 
-    document: Document
+    doc: Document
 
     func __init__(self, elements: [Element] = []):
-        self.document = Document()
+        self.doc = Document()
 
         for i, element in enumerate(elements):
-            self.document.elements.append((str(i), element))
+            self.doc.elements.append((str(i), element))
 
     func append(self, element: Element):
-        index = str(self.document.elements.length())
-        self.document.elements.append((index, element))
+        index = str(self.doc.elements.length())
+        self.doc.elements.append((index, element))
 
-    func get_array(self) -> [Element]:
-        return [element for _, element in self.document.elements]
+    func array(self) -> [Element]:
+        return [element for _, element in self.doc.elements]
 
     func at(self, index: i64) -> Element:
-        return self.document.elements[index][1]
+        return self.doc.elements[index][1]
 
 class Binary(Element):
     """A binary blob.
@@ -204,7 +204,7 @@ class Binary(Element):
 
     value: (u8, bytes)
 
-    func get_binary(self) -> (u8, bytes):
+    func binary(self) -> (u8, bytes):
         return self.value
 
 class ObjectId(Element):
@@ -214,7 +214,7 @@ class ObjectId(Element):
 
     value: bytes
 
-    func get_object_id(self) -> bytes:
+    func object_id(self) -> bytes:
         return self.value
 
 class Boolean(Element):
@@ -224,7 +224,7 @@ class Boolean(Element):
 
     value: bool
 
-    func get_boolean(self) -> bool:
+    func boolean(self) -> bool:
         return self.value
 
 class Int32(Element):
@@ -234,7 +234,7 @@ class Int32(Element):
 
     value: i32
 
-    func get_int32(self) -> i32:
+    func int32(self) -> i32:
         return self.value
 
 class Int64(Element):
@@ -244,7 +244,7 @@ class Int64(Element):
 
     value: i64
 
-    func get_int64(self) -> i64:
+    func int64(self) -> i64:
         return self.value
 
 func _decode_cstring(reader: _Reader) -> string:
@@ -311,7 +311,7 @@ func _decode_document(reader: _Reader) -> Document:
 
 func _decode_array(reader: _Reader) -> Array:
     array = Array()
-    array.document = _decode_document(reader)
+    array.doc = _decode_document(reader)
 
     return array
 
@@ -392,7 +392,7 @@ func _encode_array(writer: _Writer, name: string, element: Array):
     writer.write_u8(4)
     writer.write_bytes(name.to_utf8())
     writer.write_u8(0)
-    _encode_document_no_header(writer, element.document)
+    _encode_document_no_header(writer, element.doc)
 
 func _encode_boolean(writer: _Writer, name: string, element: Boolean):
     writer.write_u8(8)
@@ -430,8 +430,8 @@ test small_mongodb():
         b"\x00")
 
     document = decode(encoded)
-    assert document.get("whatsmyuri").get_int32() == 1
-    assert document.get("$db").get_string() == "admin"
+    assert document.get("whatsmyuri").int32() == 1
+    assert document.get("$db").string() == "admin"
 
     encoded_swapped = (
         b"\x24\x00\x00\x00"
@@ -451,26 +451,26 @@ test mongodb_list_databases():
         b"\x00\x00\x00\x61\x64\x6d\x69\x6e\x00\x00")
 
     document = decode(encoded)
-    assert document.get("listDatabases").get_double() == 1.0
-    assert not document.get("nameOnly").get_boolean()
-    assert document.get("lsid").get("id").get_binary() == (
+    assert document.get("listDatabases").double() == 1.0
+    assert not document.get("nameOnly").boolean()
+    assert document.get("lsid").get("id").binary() == (
         4,
         b"\xfb\xe9\x2e\x09\xc9\xc8\x45\x09\xa8\x01\x1d\x0f\x73\xe5\xf7\x46")
-    assert document.get("$db").get_string() == "admin"
+    assert document.get("$db").string() == "admin"
 
 test double():
     document = Document([("foo", Double(1.0))])
     encoded = encode(document)
     assert encoded == b"\x12\x00\x00\x00\x01foo\x00\x00\x00\x00\x00\x00\x00\xf0?\x00"
     decoded = decode(encoded)
-    assert decoded.get("foo").get_double() == 1.0
+    assert decoded.get("foo").double() == 1.0
 
 test string():
     document = Document([("foo", String("bar"))])
     encoded = encode(document)
     assert encoded == b"\x12\x00\x00\x00\x02foo\x00\x04\x00\x00\x00bar\x00\x00"
     decoded = decode(encoded)
-    assert decoded.get("foo").get_string() == "bar"
+    assert decoded.get("foo").string() == "bar"
 
 test document():
     document = Document([("a", Document()), ("b", Boolean(False))])
@@ -478,11 +478,11 @@ test document():
     assert encoded == (
         b"\x11\x00\x00\x00\x03a\x00\x05\x00\x00\x00\x00\x08b\x00\x00\x00")
     decoded = decode(encoded)
-    assert decoded.get_document().length() == 2
-    assert decoded.get("a").get_document().length() == 0
-    assert not decoded.get("b").get_boolean()
+    assert decoded.document().length() == 2
+    assert decoded.get("a").document().length() == 0
+    assert not decoded.get("b").boolean()
     document.elements.append(("foo", String("bar")))
-    assert document.get("foo").get_string() == "bar"
+    assert document.get("foo").string() == "bar"
 
     try:
         document.get("bar")
@@ -497,5 +497,5 @@ test array():
         b"\x1a\x00\x00\x00\x04foo\x00\x10\x00\x00\x00\x120\x00\x05\x00"
         b"\x00\x00\x00\x00\x00\x00\x00\x00")
     decoded = decode(encoded)
-    assert decoded.get("foo").get_array().length() == 1
-    assert decoded.get("foo").at(0).get_int64() == 5
+    assert decoded.get("foo").array().length() == 1
+    assert decoded.get("foo").at(0).int64() == 5
