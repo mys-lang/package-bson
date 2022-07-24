@@ -281,7 +281,7 @@ func _decode_document(reader: _Reader) -> Document:
             break
 
         name = _decode_cstring(reader)
-        element: Element = None
+        element: Element? = None
 
         match kind:
             case 1:
